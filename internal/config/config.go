@@ -49,6 +49,7 @@ type Config struct {
 	KeyFilePath           string            `desc:"Path to RSA/Ed25519 related to Config.CertFilePath" split_words:"true"`
 	CABundleFilePath      string            `desc:"Path to cabundle file related to Config.CertFilePath" split_words:"true"`
 	OpenTelemetryEndpoint string            `default:"otel-collector.observability.svc.cluster.local:4317" desc:"OpenTelemetry Collector Endpoint"`
+	ManagedBy             string            `desc:"It is for finding who is managing the webhook" split_words:"true"`
 	envs                  []corev1.EnvVar
 	caBundle              []byte
 	cert                  tls.Certificate
@@ -129,8 +130,9 @@ func (c *Config) initializeCert() {
 			panic(err.Error())
 		}
 		c.cert = cert
+	} else {
+		c.cert = c.selfSignedInMemoryCertificeate()
 	}
-	c.cert = c.selfSignedInMemoryCertificeate()
 }
 
 func (c *Config) selfSignedInMemoryCertificeate() tls.Certificate {

@@ -91,7 +91,8 @@ func (s *admissionWebhookServer) Review(in *admissionv1.AdmissionRequest) *admis
 
 	if annotation != "" {
 		bytes, err := json.Marshal([]jsonpatch.JsonPatchOperation{
-			s.createInitContainerPatch(p, annotation, disableLocalDNSServer, spec.InitContainers),
+			// Skip injecting init containers - they will be added via SlurmCluster CR customInitContainers
+			// s.createInitContainerPatch(p, annotation, disableLocalDNSServer, spec.InitContainers),
 			s.createContainerPatch(p, annotation, disableLocalDNSServer, spec.Containers),
 			s.createVolumesPatch(p, spec.Volumes),
 			s.createLabelPatch(p, podMetaPtr.Labels),

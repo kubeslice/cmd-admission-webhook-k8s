@@ -253,7 +253,7 @@ func (s *admissionWebhookServer) createInitContainerPatch(p, v string, disableLo
 	}
 
 	for _, img := range s.config.InitContainerImages {
-		initContainers = append([]corev1.Container{{
+		initContainers = append(initContainers, corev1.Container{
 			Name:            nameOf(img),
 			Env:             envVar,
 			Image:           img,
@@ -264,9 +264,11 @@ func (s *admissionWebhookServer) createInitContainerPatch(p, v string, disableLo
 				RunAsGroup:   &runAsGroup,
 				RunAsNonRoot: &runAsNonRoot,
 			},
-		}}, initContainers...)
-		s.addVolumeMounts(&initContainers[0])
-		s.addResources(&initContainers[0], poolResources)
+		})
+		// Get the last container (the one we just added)
+		lastIndex := len(initContainers) - 1
+		s.addVolumeMounts(&initContainers[lastIndex])
+		s.addResources(&initContainers[lastIndex], poolResources)
 	}
 	return jsonpatch.NewOperation("add", path.Join(p, "spec", "initContainers"), initContainers)
 }

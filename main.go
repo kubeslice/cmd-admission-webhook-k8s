@@ -51,6 +51,8 @@ import (
 
 var deserializer = serializer.NewCodecFactory(runtime.NewScheme()).UniversalDeserializer()
 var disableLocalDNSServerAnnotation = "networkservicemesh.io/disable-local-dnsserver"
+var skipInitContainerValue = "true"
+var skipInitContainerLabel = "kubeslice.io/skip-init-container"
 
 type admissionWebhookServer struct {
 	config *config.Config
@@ -89,13 +91,24 @@ func (s *admissionWebhookServer) Review(in *admissionv1.AdmissionRequest) *admis
 		}
 	}
 
+	skipInitContainer := false
+	if _, ok := podMetaPtr.Labels[skipInitContainerLabel]; ok {
+		if podMetaPtr.Labels[skipInitContainerLabel] == skipInitContainerValue {
+			skipInitContainer = true
+		}
+	}
+
 	if annotation != "" {
-		bytes, err := json.Marshal([]jsonpatch.JsonPatchOperation{
-			s.createInitContainerPatch(p, annotation, disableLocalDNSServer, spec.InitContainers),
+		patches := []jsonpatch.JsonPatchOperation{}
+		if !skipInitContainer {
+			patches = append(patches, s.createInitContainerPatch(p, annotation, disableLocalDNSServer, spec.InitContainers))
+		}
+		patches = append(patches,
 			s.createContainerPatch(p, annotation, disableLocalDNSServer, spec.Containers),
 			s.createVolumesPatch(p, spec.Volumes),
 			s.createLabelPatch(p, podMetaPtr.Labels),
-		})
+		)
+		bytes, err := json.Marshal(patches)
 		if err != nil {
 			resp.Result = &v1.Status{
 				Status: err.Error(),

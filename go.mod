@@ -1,6 +1,6 @@
 module github.com/networkservicemesh/cmd-admission-webhook
 
-go 1.18
+go 1.25
 
 require (
 	github.com/kelseyhightower/envconfig v1.4.0

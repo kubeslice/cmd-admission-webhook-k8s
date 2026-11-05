@@ -252,18 +252,23 @@ func (s *admissionWebhookServer) createInitContainerPatch(p, v string, disableLo
 		envVar = append(envVar, corev1.EnvVar{Name: "NSM_LOCALDNSSERVERENABLED", Value: "false"})
 	}
 
+	securityContext := &corev1.SecurityContext{
+		Privileged:   &privileged,
+		RunAsUser:    &runAsUser,
+		RunAsGroup:   &runAsGroup,
+		RunAsNonRoot: &runAsNonRoot,
+	}
+	if s.config.SidecarRestricted {
+		securityContext = restrictedSecurityContext(s.config.InitCaps)
+	}
+
 	for _, img := range s.config.InitContainerImages {
 		initContainers = append([]corev1.Container{{
 			Name:            nameOf(img),
 			Env:             envVar,
 			Image:           img,
 			ImagePullPolicy: corev1.PullIfNotPresent,
-			SecurityContext: &corev1.SecurityContext{
-				Privileged:   &privileged,
-				RunAsUser:    &runAsUser,
-				RunAsGroup:   &runAsGroup,
-				RunAsNonRoot: &runAsNonRoot,
-			},
+			SecurityContext: securityContext.DeepCopy(),
 		}}, initContainers...)
 		s.addVolumeMounts(&initContainers[0])
 		s.addResources(&initContainers[0], poolResources)
@@ -287,24 +292,50 @@ func (s *admissionWebhookServer) createContainerPatch(p, v string, disableLocalD
 		envVar = append(envVar, corev1.EnvVar{Name: "NSM_LOCALDNSSERVERENABLED", Value: "false"})
 	}
 
+	securityContext := &corev1.SecurityContext{
+		Privileged:   &privileged,
+		Capabilities: &capabilities,
+		RunAsUser:    &runAsUser,
+		RunAsGroup:   &runAsGroup,
+		RunAsNonRoot: &runAsNonRoot,
+	}
+	if s.config.SidecarRestricted {
+		securityContext = restrictedSecurityContext(s.config.ContainerCaps)
+	}
+
 	for _, img := range s.config.ContainerImages {
 		containers = append(containers, corev1.Container{
 			Name:            nameOf(img),
 			Env:             envVar,
 			Image:           img,
 			ImagePullPolicy: corev1.PullIfNotPresent,
-			SecurityContext: &corev1.SecurityContext{
-				Privileged:   &privileged,
-				Capabilities: &capabilities,
-				RunAsUser:    &runAsUser,
-				RunAsGroup:   &runAsGroup,
-				RunAsNonRoot: &runAsNonRoot,
-			},
+			SecurityContext: securityContext.DeepCopy(),
 		})
 		s.addVolumeMounts(&containers[len(containers)-1])
 		s.addDefaultResourceRequest(&containers[len(containers)-1])
 	}
 	return jsonpatch.NewOperation("add", path.Join(p, "spec", "containers"), containers)
+}
+
+// restrictedSecurityContext: root, not privileged, drop ALL but caps; fully set so OpenShift SCC needn't mutate it.
+func restrictedSecurityContext(caps []string) *corev1.SecurityContext {
+	var root int64 = 0
+	var runAsNonRoot bool = false
+	var no bool = false
+	capabilities := &corev1.Capabilities{Drop: []corev1.Capability{"ALL"}}
+	for _, c := range caps {
+		if c = strings.TrimSpace(c); c != "" {
+			capabilities.Add = append(capabilities.Add, corev1.Capability(c))
+		}
+	}
+	return &corev1.SecurityContext{
+		Privileged:               &no,
+		AllowPrivilegeEscalation: &no,
+		Capabilities:             capabilities,
+		RunAsUser:                &root,
+		RunAsGroup:               &root,
+		RunAsNonRoot:             &runAsNonRoot,
+	}
 }
 
 func nameOf(img string) string {
@@ -367,6 +398,9 @@ func main() {
 	var logger = prod.Sugar()
 
 	logger.Infof("config.Config: %#v", conf)
+	if conf.SidecarRestricted {
+		logger.Infof("Sidecar restricted mode on, privileged is not set; init caps %v, container caps %v", conf.InitCaps, conf.ContainerCaps)
+	}
 
 	ctx, cancel := signal.NotifyContext(context.Background(),
 		os.Interrupt,

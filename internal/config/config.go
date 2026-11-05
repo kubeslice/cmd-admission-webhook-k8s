@@ -51,6 +51,9 @@ type Config struct {
 	CABundleFilePath      string            `desc:"Path to cabundle file related to Config.CertFilePath" split_words:"true"`
 	OpenTelemetryEndpoint string            `default:"otel-collector.observability.svc.cluster.local:4317" desc:"OpenTelemetry Collector Endpoint"`
 	RegisterWebhookClient string            `default:"true" desc:"Determines whether the mutating webhook configuration should be applied programmatically (true) or through YAML deployment (false)" split_words:"true"`
+	SidecarRestricted     bool              `default:"false" desc:"Run injected containers as root, not privileged, with all capabilities dropped except Config.InitCaps/Config.ContainerCaps" split_words:"true"`
+	InitCaps              []string          `desc:"Capabilities added to init containers when Config.SidecarRestricted is true" split_words:"true"`
+	ContainerCaps         []string          `desc:"Capabilities added to containers when Config.SidecarRestricted is true" split_words:"true"`
 	envs                  []corev1.EnvVar
 	cert                  tls.Certificate
 	once                  sync.Once
